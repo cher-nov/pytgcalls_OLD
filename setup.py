@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
 
-# Notes:
-# - We use the GYP fork from Conan's Bincrafters since the original version
-#   from https://chromium.googlesource.com/external/gyp doesn't support
-#   Python3 properly.
-# - We use the Ninja distribution from PyPi, but Conan distribution is also
-#   available: https://github.com/bincrafters/conan-ninja_installer
-#   This may be changed in case of problems with Ninja 'wheels' on Linux'es.
-
 import sys
 import os
 import subprocess
@@ -124,9 +116,6 @@ class BuildExtCommandHook(build_ext):
                 for x in macros], target.get("libraries", [])
 
     def _build_libtgvoip(self, dummy_ext):
-        from ninja import _program as _ninja_program
-        ninja_run = lambda *args: _ninja_program("ninja", list(args))
-
     #   Phase 1: Obtain all the necessary dependencies and their install info.
 
         # FIXME: Currently two different versions of GYP are available:
@@ -151,13 +140,14 @@ class BuildExtCommandHook(build_ext):
         # our case. But of course this is not a tidy way to make business.
         # https://github.com/bincrafters/community/issues/851
 
-        #gyp_path, *_swig_path_TODO = self._conan_install(
-        #    "gyp_installer/[~=20190423]@bincrafters/stable",
-        #    # TODO: Add SWIG ~=4.0.0 here right after it will be published.
-        #    # https://github.com/bincrafters/community/issues/610
-        #    # Also, self.swig specifies the path to SWIG and should be used.
-        #    executable=True
-        #)
+        ninja_path, *_gyp_and_swig_pathes_TODO = self._conan_install(
+            #"gyp_installer/[~=20190423]@bincrafters/stable",
+            "ninja_installer/[~=1.9.0]@bincrafters/stable",
+            # TODO: Add SWIG ~=4.0.0 here right after it will be published.
+            # https://github.com/bincrafters/community/issues/610
+            # Also, self.swig specifies the path to SWIG and should be used.
+            executable=True
+        )
         gyp_path = os.path.join("share", "gyp-pytgcalls")
 
         # NOTE: Previous versions of Conan package for OpenSSL doesn't specify
@@ -177,6 +167,12 @@ class BuildExtCommandHook(build_ext):
             *args,
             os.path.join(_LIBRARY_PATH, "{}.gyp".format(_LIBRARY_NAME))
         )
+
+        ninja_run = lambda *args: subprocess.check_call((
+            os.path.join(ninja_path, "ninja"),
+            "--verbose",
+            *args
+        ))
 
     #   Phase 2: Generate the Ninja script and obtain info from the GYP script.
         build_dir = os.path.join(CACHE_FOLDER, _BUILD_TARGET)
@@ -212,7 +208,7 @@ class BuildExtCommandHook(build_ext):
         swig_opts_gyp = gen_preprocess_options(gypd_macros, [])#, include_dirs)
 
     #   Phase 3: Build libtgvoip and return a complete SWIG Extension object.
-        ninja_run("--verbose", "-C", build_dir)
+        ninja_run("-C", build_dir)
         library_dirs.append(build_dir)
         libraries.extend(gypd_libraries)
         libraries.append(_LIBRARY_NAME if _PLATFORM_OS == _OS_WINDOWS
@@ -288,8 +284,7 @@ package_setup = dict(
 
     # NOTE: don't use dependency_links - it requires --process-dependency-links
     setup_requires=[
-        "conan",
-        "ninja"
+        "conan"
     ],
 
     packages=find_packages(),
