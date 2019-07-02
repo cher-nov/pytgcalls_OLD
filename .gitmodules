@@ -1,0 +1,6 @@
+[submodule "share/libtgvoip"]
+	path = share/libtgvoip
+	url = https://github.com/grishka/libtgvoip.git
+[submodule "share/gyp-pytgcalls"]
+	path = share/gyp-pytgcalls
+	url = https://github.com/cher-nov/gyp-pytgcalls.git

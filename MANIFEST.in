@@ -1,0 +1,6 @@
+graft share
+include *.gypi
+recursive-include swig *.i *.swg
+
+global-exclude .git* .git/**
+recursive-exclude pytgcalls libtgvoip.py
