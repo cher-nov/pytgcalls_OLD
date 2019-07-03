@@ -15,12 +15,16 @@ PACKAGE_VERSION = "0.1"
 ENVVAR_VERSION_SUFFIX = "PYPI_SETUP_VERSION_SUFFIX"
 CACHE_FOLDER = "cache_{}".format(sys.platform)
 
+# TODO: could it be replaced by the '--debug/-g' option of 'build_ext' command?
+# Or maybe it's worth replacing it with an environment variable?
+DEBUG_BUILD = False
+
 _PACKAGE_URL = "https://github.com/cher-nov/" + PACKAGE_NAME
 _GYP_DEFINES = "GYP_DEFINES"
 _LIBRARY_NAME_CUT = "tgvoip"
 _LIBRARY_NAME = "lib"+_LIBRARY_NAME_CUT
 _LIBRARY_PATH = os.path.join("share", _LIBRARY_NAME)
-_BUILD_TARGET = "Release"
+_BUILD_TYPE = "Debug" if DEBUG_BUILD else "Release"
 
 _OS_WINDOWS = 0
 _OS_MACOS = 1
@@ -44,6 +48,12 @@ class BuildPyCommandHook(build_py):
         return super().run(*args, **kwargs)
 
 class BuildExtCommandHook(build_ext):
+    @staticmethod
+    def _property_map(mapping):
+        if not mapping:
+            return None
+        return ["{}={}".format(key, value) for key, value in mapping.items()]
+
     def _conan_install(self, *references, options=None, executable=False):
         from conans.model.ref import ConanFileReference
 
@@ -52,21 +62,26 @@ class BuildExtCommandHook(build_ext):
         library_dirs = []
         libraries = []
 
-        if options:
-            options = ["{}={}".format(key, value)
-                       for key, value in options.items()]
-
         # TODO: Do we need 'compiler.libcxx=libstdc++11' on Linux/macOS here?
         # https://docs.conan.io/en/latest/howtos/manage_gcc_abi.html
-        settings = None if executable else ["arch={}".format(
-            "x86_64" if _PLATFORM_BITS == 64 else "x86")]
+        settings = None if executable else {
+            'build_type': _BUILD_TYPE,
+            'arch': "x86_64" if _PLATFORM_BITS == 64 else "x86"
+        }
+
+        # For debug mode we must build everything from scratch to achieve the
+        # correct locations of debug symbols files in the resulting binaries.
+        # Otherwise, we build only packages without pre-assembled releases.
+        build = []  # NOTE: 'None' means 'use only pre-assembled releases'.
+        if executable or not DEBUG_BUILD:
+            build.append('missing')
 
         for x in references:
             result = self.conan_api.install_reference(
                 reference=ConanFileReference.loads(x),
-                build=['missing'],
-                options=options,
-                settings=settings
+                build=build,
+                options=self._property_map(options),
+                settings=self._property_map(settings)
             )
             if result['error']:
                 # TODO: Check if root 'error' is actually True on error. Also
@@ -175,7 +190,7 @@ class BuildExtCommandHook(build_ext):
         ))
 
     #   Phase 2: Generate the Ninja script and obtain info from the GYP script.
-        build_dir = os.path.join(CACHE_FOLDER, _BUILD_TARGET)
+        build_dir = os.path.join(CACHE_FOLDER, _BUILD_TYPE)
         self._gyp_defines_append("dynamic_msvc_runtime", 1)  # 'True'
         self._gyp_defines_append("conan_include_dirs", *include_dirs)
         self._gyp_defines_append("build_output_dir", build_dir)
@@ -201,7 +216,7 @@ class BuildExtCommandHook(build_ext):
 
         with open(gypd_filename, 'r') as gypd:
             gypd_macros, gypd_libraries = self._extract_gypd_options(
-                gypd, _BUILD_TARGET)
+                gypd, _BUILD_TYPE)
 
         # We extract macros that were used to build libtgvoip to pass them to
         # SWIG and therefore ensure that it will process the same source code.
@@ -235,6 +250,7 @@ class BuildExtCommandHook(build_ext):
         from conans.client.conan_api import Conan
         local_path = os.path.dirname(os.path.realpath(__file__))
         os.environ["CONAN_USER_HOME"] = os.path.join(local_path, CACHE_FOLDER)
+        self.debug = DEBUG_BUILD
         self.conan_api, *_ = Conan.factory()
 
         try:
