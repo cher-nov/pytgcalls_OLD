@@ -13,7 +13,7 @@
   %include header
 %enddef
 
-%module(package="pytgcalls") libtgvoip
+%module(package="pytgcalls", threads="1") libtgvoip
 
 // TODO: Consider ignoring everything and then specify only the required parts.
 // TODO: Is there any better way to workaround invalid code generation due to
