@@ -1,3 +1,7 @@
+#ifndef SWIGPYTHON_PY3
+#  error "This SWIG template file is Python3-specific, sorry. ;C"
+#endif
+
 %include <inttypes.i>
 %include <attribute.i>
 %include <cstring.i>
