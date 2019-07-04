@@ -15,16 +15,18 @@ PACKAGE_VERSION = "0.1"
 ENVVAR_VERSION_SUFFIX = "PYPI_SETUP_VERSION_SUFFIX"
 CACHE_FOLDER = "cache_{}".format(sys.platform)
 
-# TODO: could it be replaced by the '--debug/-g' option of 'build_ext' command?
-# Or maybe it's worth replacing it with an environment variable?
-DEBUG_BUILD = False
+# 'None' - Release build
+# 'False' - Debug build for the Release build of CPython ("python" executable)
+# 'True' - Debug build for the Debug build of CPython ("python_d" executable)
+DEBUG_LEVEL = {"0": False, "1": True}.get(
+    os.environ.get("PYTGCALLS_DEBUG_LEVEL"))
 
 _PACKAGE_URL = "https://github.com/cher-nov/" + PACKAGE_NAME
 _GYP_DEFINES = "GYP_DEFINES"
 _LIBRARY_NAME_CUT = "tgvoip"
 _LIBRARY_NAME = "lib"+_LIBRARY_NAME_CUT
 _LIBRARY_PATH = os.path.join("share", _LIBRARY_NAME)
-_BUILD_TYPE = "Debug" if DEBUG_BUILD else "Release"
+_BUILD_TYPE = "Release" if DEBUG_LEVEL is None else "Debug"
 
 _OS_WINDOWS = 0
 _OS_MACOS = 1
@@ -73,7 +75,7 @@ class BuildExtCommandHook(build_ext):
         # correct locations of debug symbols files in the resulting binaries.
         # Otherwise, we build only packages without pre-assembled releases.
         build = []  # NOTE: 'None' means 'use only pre-assembled releases'.
-        if executable or not DEBUG_BUILD:
+        if executable or DEBUG_LEVEL is None:
             build.append('missing')
 
         for x in references:
@@ -229,6 +231,9 @@ class BuildExtCommandHook(build_ext):
         libraries.append(_LIBRARY_NAME if _PLATFORM_OS == _OS_WINDOWS
                          else _LIBRARY_NAME_CUT)
 
+        if DEBUG_LEVEL == False:
+            gypd_macros.append(("SWIG_PYTHON_INTERPRETER_NO_DEBUG", None))
+
         # We create a new Extension object to perform all the parameter checks.
         return Extension(
             name=dummy_ext.name,
@@ -250,7 +255,7 @@ class BuildExtCommandHook(build_ext):
         from conans.client.conan_api import Conan
         local_path = os.path.dirname(os.path.realpath(__file__))
         os.environ["CONAN_USER_HOME"] = os.path.join(local_path, CACHE_FOLDER)
-        self.debug = DEBUG_BUILD
+        self.debug = DEBUG_LEVEL is not None
         self.conan_api, *_ = Conan.factory()
 
         try:
