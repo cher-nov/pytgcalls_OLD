@@ -20,8 +20,8 @@
 
     # For an unknown reason (bug?), setting PRODUCT_DIR from setup.py neither
     # in GYP_DEFINES nor as '-DPRODUCT_DIR=' in the command line doesn't make
-    # any sense, so this is a workaround ('./' makes path relative to root).
-    'product_dir': './<(build_output_dir)',
+    # any sense, so this is a workaround. The specified path must be absolute!
+    'product_dir': '<(build_output_dir)',
 
     # Position-independent code is required by SWIG. This is also defined in
     # the Telegram Desktop project (tdesktop:Telegram/gyp/settings_linux.gypi),

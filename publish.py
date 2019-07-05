@@ -10,8 +10,8 @@ import shutil
 sys.dont_write_bytecode = True  # prevent __pycache__ on importing 'setup'
 sys.path.insert(0, os.path.realpath(__file__))  # ensure to import './setup.py'
 from setup import (
-    PACKAGE_NAME, PACKAGE_VERSION, ENVVAR_VERSION_SUFFIX, CACHE_FOLDER,
-    execute_py
+    PACKAGE_NAME, PACKAGE_VERSION, ENVVAR_VERSION_SUFFIX, execute_py,
+    _CACHE_FOLDER
 )
 
 def purge(skip_errors, *extra_folders):
@@ -55,7 +55,7 @@ def main(argv):
         os.environ[ENVVAR_VERSION_SUFFIX] =  "dev{}".format(int(time.time()))
         os.environ["TWINE_REPOSITORY_URL"] = "https://test.pypi.org/legacy/"
     else:
-        extra_folders.append(CACHE_FOLDER)
+        extra_folders.append(_CACHE_FOLDER)
 
     try:
         execute_py("setup.py", "sdist")

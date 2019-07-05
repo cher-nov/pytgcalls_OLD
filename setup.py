@@ -13,12 +13,11 @@ from distutils.ccompiler import gen_preprocess_options
 PACKAGE_NAME = "pytgcalls"
 PACKAGE_VERSION = "0.1"
 ENVVAR_VERSION_SUFFIX = "PYPI_SETUP_VERSION_SUFFIX"
-CACHE_FOLDER = "cache_{}".format(sys.platform)
 
 # 'None' - Release build
 # 'False' - Debug build for the Release build of CPython ("python" executable)
 # 'True' - Debug build for the Debug build of CPython ("python_d" executable)
-DEBUG_LEVEL = {"0": False, "1": True}.get(
+_DEBUG_LEVEL = {"0": False, "1": True}.get(
     os.environ.get("PYTGCALLS_DEBUG_LEVEL"))
 
 _PACKAGE_URL = "https://github.com/cher-nov/" + PACKAGE_NAME
@@ -26,7 +25,7 @@ _GYP_DEFINES = "GYP_DEFINES"
 _LIBRARY_NAME_CUT = "tgvoip"
 _LIBRARY_NAME = "lib"+_LIBRARY_NAME_CUT
 _LIBRARY_PATH = os.path.join("share", _LIBRARY_NAME)
-_BUILD_TYPE = "Release" if DEBUG_LEVEL is None else "Debug"
+_BUILD_TYPE = "Release" if _DEBUG_LEVEL is None else "Debug"
 
 _OS_WINDOWS = 0
 _OS_MACOS = 1
@@ -35,6 +34,9 @@ _OS_LINUX = 2
 _PLATFORM_OS = {'win32': _OS_WINDOWS, 'darwin': _OS_MACOS}.get(
     sys.platform, _OS_LINUX)
 _PLATFORM_BITS = struct.calcsize('P') * 8
+
+_CACHE_FOLDER = os.path.join(
+    "cache_{}".format(sys.platform), "{}_{}".format(_BUILD_TYPE, _DEBUG_LEVEL))
 
 
 def execute_py(*args, module=False):
@@ -75,7 +77,7 @@ class BuildExtCommandHook(build_ext):
         # correct locations of debug symbols files in the resulting binaries.
         # Otherwise, we build only packages without pre-assembled releases.
         build = []  # NOTE: 'None' means 'use only pre-assembled releases'.
-        if executable or DEBUG_LEVEL is None:
+        if executable or _DEBUG_LEVEL is None:
             build.append('missing')
 
         for x in references:
@@ -192,7 +194,7 @@ class BuildExtCommandHook(build_ext):
         ))
 
     #   Phase 2: Generate the Ninja script and obtain info from the GYP script.
-        build_dir = os.path.join(CACHE_FOLDER, _BUILD_TYPE)
+        build_dir = os.path.realpath(os.path.join(_CACHE_FOLDER, _BUILD_TYPE))
         self._gyp_defines_append("dynamic_msvc_runtime", 1)  # 'True'
         self._gyp_defines_append("conan_include_dirs", *include_dirs)
         self._gyp_defines_append("build_output_dir", build_dir)
@@ -202,7 +204,7 @@ class BuildExtCommandHook(build_ext):
         gyp_libtgvoip_run(
             "ninja",
             "--generator-output={}".format(
-                os.path.join("..", "..", CACHE_FOLDER)),
+                os.path.join("..", "..", _CACHE_FOLDER)),
             "-Goutput_dir=."
         )
 
@@ -231,7 +233,7 @@ class BuildExtCommandHook(build_ext):
         libraries.append(_LIBRARY_NAME if _PLATFORM_OS == _OS_WINDOWS
                          else _LIBRARY_NAME_CUT)
 
-        if DEBUG_LEVEL == False:
+        if _DEBUG_LEVEL == False:
             gypd_macros.append(("SWIG_PYTHON_INTERPRETER_NO_DEBUG", None))
 
         # We create a new Extension object to perform all the parameter checks.
@@ -254,8 +256,8 @@ class BuildExtCommandHook(build_ext):
     def run(self, *args, **kwargs):
         from conans.client.conan_api import Conan
         local_path = os.path.dirname(os.path.realpath(__file__))
-        os.environ["CONAN_USER_HOME"] = os.path.join(local_path, CACHE_FOLDER)
-        self.debug = DEBUG_LEVEL is not None
+        os.environ["CONAN_USER_HOME"] = os.path.join(local_path, _CACHE_FOLDER)
+        self.debug = _DEBUG_LEVEL is not None
         self.conan_api, *_ = Conan.factory()
 
         try:
