@@ -134,6 +134,28 @@ class BuildExtCommandHook(build_ext):
         return [tuple((list(map(str.strip, x.split("=", 1)))+[None])[:2])
                 for x in macros], target.get("libraries", [])
 
+    @staticmethod
+    def _get_platform_defines():
+        # NOTE: This specifies only official (?) defines, used by libtgvoip.
+        result = []
+
+        if _PLATFORM_OS == _OS_WINDOWS:
+            result.append(("_WIN32", None))
+            if _PLATFORM_BITS == 64:
+                result.append(("_WIN64", None))
+        else:  # POSIX
+            result.append(("_POSIX_VERSION", None))  # the version is unknown
+
+            if _PLATFORM_OS == _OS_MACOS:
+                result.append(("__APPLE__", None))
+                result.append(("__OSX__", None))
+                result.append(("__MACH__", None))  # also used by GNU/Hurd
+            else:  # *NIX
+                result.append(("__unix__", None))
+                result.append(("__unix", None))
+
+        return result
+
     def _build_libtgvoip(self, dummy_ext):
     #   Phase 1: Obtain all the necessary dependencies and their install info.
 
@@ -224,7 +246,10 @@ class BuildExtCommandHook(build_ext):
 
         # We extract macros that were used to build libtgvoip to pass them to
         # SWIG and therefore ensure that it will process the same source code.
-        swig_opts_gyp = gen_preprocess_options(gypd_macros, [])#, include_dirs)
+        swig_opts_gyp = gen_preprocess_options(
+            gypd_macros + self._get_platform_defines(),
+            [] #include_dirs
+        )
 
     #   Phase 3: Build libtgvoip and return a complete SWIG Extension object.
         ninja_run("-C", build_dir)
@@ -235,6 +260,7 @@ class BuildExtCommandHook(build_ext):
 
         if _DEBUG_LEVEL == False:
             gypd_macros.append(("SWIG_PYTHON_INTERPRETER_NO_DEBUG", None))
+        #gypd_macros.append(("SWIG_PYTHON_STRICT_BYTE_CHAR", None))
 
         # We create a new Extension object to perform all the parameter checks.
         return Extension(
