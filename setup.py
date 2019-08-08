@@ -4,6 +4,7 @@ import sys
 import os
 import subprocess
 import struct
+import configparser
 
 from setuptools import find_packages, setup, Extension
 from distutils.command.build_py import build_py
@@ -60,11 +61,13 @@ class BuildExtCommandHook(build_ext):
 
     def _conan_install(self, *references, options=None, executable=False):
         from conans.model.ref import ConanFileReference
+        #from conans.client.command import get_reference_fields
 
         binary_dirs = []
         include_dirs = []
         library_dirs = []
         libraries = []
+        environ_vars = {}
 
         # TODO: Do we need 'compiler.libcxx=libstdc++11' on Linux/macOS here?
         # https://docs.conan.io/en/latest/howtos/manage_gcc_abi.html
@@ -81,12 +84,20 @@ class BuildExtCommandHook(build_ext):
             build.append('missing')
 
         for x in references:
-            result = self.conan_api.install_reference(
-                reference=ConanFileReference.loads(x),
-                build=build,
-                options=self._property_map(options),
-                settings=self._property_map(settings)
-            )
+            cwd = os.getcwd()
+            ref = ConanFileReference.loads(x)
+            try:
+                os.chdir(_CACHE_FOLDER)  # to output generator files
+                result = self.conan_api.install_reference(
+                    reference=ref,
+                    build=build,
+                    options=self._property_map(options),
+                    settings=self._property_map(settings),
+                    generators=["txt"]
+                )
+            finally:
+                os.chdir(cwd)
+
             if result['error']:
                 # TODO: Check if root 'error' is actually True on error. Also
                 # check the 'installed.recipe.error' value - is it a message?
@@ -107,8 +118,15 @@ class BuildExtCommandHook(build_ext):
                     library_dirs.extend(rootpath_expand('libdirs'))
                     libraries.extend(info.get('libs', ()))
 
+            build_info = configparser.ConfigParser(
+                allow_no_value=True, delimiters=('='),
+                comment_prefixes=None)
+            build_info.optionxform = str  # preserve case of parameters
+            build_info.read(os.path.join(_CACHE_FOLDER, "conanbuildinfo.txt"))
+            environ_vars.update(build_info['ENV_'+ref.name])
+
         if executable:
-            return binary_dirs
+            return (environ_vars, *binary_dirs)
         return include_dirs, library_dirs, libraries
 
     @staticmethod
@@ -181,15 +199,16 @@ class BuildExtCommandHook(build_ext):
         # our case. But of course this is not a tidy way to make business.
         # https://github.com/bincrafters/community/issues/851
 
-        ninja_path, *_gyp_and_swig_pathes_TODO = self._conan_install(
+        env_vars, ninja_path, swig_path, *_gyp_path_TODO = self._conan_install(
             #"gyp_installer/[~=20190423]@bincrafters/stable",
             "ninja_installer/[~=1.9.0]@bincrafters/stable",
-            # TODO: Add SWIG ~=4.0.0 here right after it will be published.
-            # https://github.com/bincrafters/community/issues/610
-            # Also, self.swig specifies the path to SWIG and should be used.
+            "swig_installer/[~=4.0.0]@bincrafters/stable",
             executable=True
         )
+
         gyp_path = os.path.join("share", "gyp-pytgcalls")
+        self.swig = os.path.join(swig_path, "swig")
+        os.environ['SWIG_LIB'] = env_vars.get('SWIG_LIB', swig_path)
 
         # NOTE: Previous versions of Conan package for OpenSSL doesn't specify
         # some libraries that are required to be linked with it on Windows.
@@ -281,10 +300,20 @@ class BuildExtCommandHook(build_ext):
 
     def run(self, *args, **kwargs):
         from conans.client.conan_api import Conan
+
         local_path = os.path.dirname(os.path.realpath(__file__))
-        os.environ["CONAN_USER_HOME"] = os.path.join(local_path, _CACHE_FOLDER)
+        cache_folder = os.path.join(local_path, _CACHE_FOLDER)
+        os.makedirs(cache_folder, exist_ok=True)
+        os.environ["CONAN_USER_HOME"] = cache_folder
         self.debug = _DEBUG_LEVEL is not None
         self.conan_api, *_ = Conan.factory()
+
+        # This is the official repository of Conan community.
+        self.conan_api.remote_add(
+            "bincrafters",
+            "https://api.bintray.com/conan/bincrafters/public-conan",
+            force=True
+        )
 
         try:
             self.distribution.ext_modules.append(

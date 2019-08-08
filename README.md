@@ -4,9 +4,7 @@ The SWIG-based Python 3 wrapper package around `libtgvoip`, Telegram's library f
 
 ## Installation
 
-Currently, SWIG 4.0.0 must be installed in your system. This will be fixed in the future, once the SWIG package is available for Conan.
-
-After SWIG is available in your system, simply run:
+Simply run:
 
 ```sh
 pip3 install pytgcalls
