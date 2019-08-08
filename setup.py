@@ -305,6 +305,7 @@ class BuildExtCommandHook(build_ext):
         cache_folder = os.path.join(local_path, _CACHE_FOLDER)
         os.makedirs(cache_folder, exist_ok=True)
         os.environ["CONAN_USER_HOME"] = cache_folder
+        os.environ["CONAN_USER_HOME_SHORT"] = cache_folder
         self.debug = _DEBUG_LEVEL is not None
         self.conan_api, *_ = Conan.factory()
 
