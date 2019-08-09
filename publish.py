@@ -10,8 +10,7 @@ import shutil
 sys.dont_write_bytecode = True  # prevent __pycache__ on importing 'setup'
 sys.path.insert(0, os.path.realpath(__file__))  # ensure to import './setup.py'
 from setup import (
-    PACKAGE_NAME, PACKAGE_VERSION, ENVVAR_VERSION_SUFFIX, execute_py,
-    _CACHE_FOLDER
+    PACKAGE_NAME, PACKAGE_VERSION, ENVVAR_VERSION_SUFFIX, execute_py
 )
 
 def purge(skip_errors, *extra_folders):
@@ -45,24 +44,18 @@ def main(argv):
         return
 
     purge(False)
-
-    debug = "testpypi" in argv
-    extra_folders = []
-
-    if debug:
+    if "testpypi" in argv:
         # https://test.pypi.org/help/#file-name-reuse
         # https://www.python.org/dev/peps/pep-0440/#developmental-releases
         os.environ[ENVVAR_VERSION_SUFFIX] =  "dev{}".format(int(time.time()))
         os.environ["TWINE_REPOSITORY_URL"] = "https://test.pypi.org/legacy/"
-    else:
-        extra_folders.append(_CACHE_FOLDER)
 
     try:
         execute_py("setup.py", "sdist")
         #execute_py("setup.py", "bdist_wheel")
         execute_py("twine", "upload", "dist/*", module=True)
     finally:
-        purge(True, *extra_folders)
+        purge(True)
 
 
 if __name__ == '__main__':

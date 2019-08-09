@@ -7,6 +7,7 @@ import struct
 import configparser
 
 from setuptools import find_packages, setup, Extension
+from distutils import log
 from distutils.command.build_py import build_py
 from distutils.command.build_ext import build_ext
 from distutils.ccompiler import gen_preprocess_options
@@ -35,9 +36,6 @@ _OS_LINUX = 2
 _PLATFORM_OS = {'win32': _OS_WINDOWS, 'darwin': _OS_MACOS}.get(
     sys.platform, _OS_LINUX)
 _PLATFORM_BITS = struct.calcsize('P') * 8
-
-_CACHE_FOLDER = os.path.join(
-    "cache_{}".format(sys.platform), "{}_{}".format(_BUILD_TYPE, _DEBUG_LEVEL))
 
 
 def execute_py(*args, module=False):
@@ -87,7 +85,7 @@ class BuildExtCommandHook(build_ext):
             cwd = os.getcwd()
             ref = ConanFileReference.loads(x)
             try:
-                os.chdir(_CACHE_FOLDER)  # to output generator files
+                os.chdir(self.cache_path)  # to output generator files
                 result = self.conan_api.install_reference(
                     reference=ref,
                     build=build,
@@ -122,7 +120,7 @@ class BuildExtCommandHook(build_ext):
                 allow_no_value=True, delimiters=('='),
                 comment_prefixes=None)
             build_info.optionxform = str  # preserve case of parameters
-            build_info.read(os.path.join(_CACHE_FOLDER, "conanbuildinfo.txt"))
+            build_info.read(os.path.join(self.cache_path, "conanbuildinfo.txt"))
             environ_vars.update(build_info['ENV_'+ref.name])
 
         if executable:
@@ -235,18 +233,19 @@ class BuildExtCommandHook(build_ext):
         ))
 
     #   Phase 2: Generate the Ninja script and obtain info from the GYP script.
-        build_dir = os.path.realpath(os.path.join(_CACHE_FOLDER, _BUILD_TYPE))
+        build_dir = os.path.join(self.cache_path, _BUILD_TYPE)
         self._gyp_defines_append("dynamic_msvc_runtime", 1)  # 'True'
         self._gyp_defines_append("conan_include_dirs", *include_dirs)
         self._gyp_defines_append("build_output_dir", build_dir)
         self._gyp_defines_append("build_msvc_platform",
             "x64" if _PLATFORM_BITS == 64 else "Win32")
 
+        # NOTE: Generator output path is forced on the generator level to be
+        # relative to current working directory, so instead of this we pass a
+        # full path using the 'output_dir' flag specific to the Ninja generator.
         gyp_libtgvoip_run(
             "ninja",
-            "--generator-output={}".format(
-                os.path.join("..", "..", _CACHE_FOLDER)),
-            "-Goutput_dir=."
+            "-Goutput_dir={}".format(self.cache_path)
         )
 
         # debug generator requires 'OS' to be defined
@@ -298,15 +297,24 @@ class BuildExtCommandHook(build_ext):
             ] + swig_opts_gyp
         )
 
+    def finalize_options(self, *args, **kwargs):
+        # this is reqired to correctly build value of self.build_temp
+        self.debug = _DEBUG_LEVEL is not None
+        return super().finalize_options(*args, **kwargs)
+
     def run(self, *args, **kwargs):
         from conans.client.conan_api import Conan
 
-        local_path = os.path.dirname(os.path.realpath(__file__))
-        cache_folder = os.path.join(local_path, _CACHE_FOLDER)
-        os.makedirs(cache_folder, exist_ok=True)
-        os.environ["CONAN_USER_HOME"] = cache_folder
-        os.environ["CONAN_USER_HOME_SHORT"] = cache_folder
-        self.debug = _DEBUG_LEVEL is not None
+        if self.debug:
+            self.build_temp = "{}_{}".format(self.build_temp, _DEBUG_LEVEL)
+        log.info(self.build_temp)
+        os.makedirs(self.build_temp, exist_ok=True)
+        self.cache_path = os.path.realpath(self.build_temp)
+
+        os.environ["CONAN_USER_HOME"] = self.cache_path
+        os.environ["CONAN_USER_HOME_SHORT"] = self.cache_path
+        if _PLATFORM_OS == _OS_WINDOWS:
+            os.environ["CONAN_USE_ALWAYS_SHORT_PATHS"] = "True"
         self.conan_api, *_ = Conan.factory()
 
         # This is the official repository of Conan community.
