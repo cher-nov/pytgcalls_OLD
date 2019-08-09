@@ -210,7 +210,7 @@ class BuildExtCommandHook(build_ext):
 
         # NOTE: Previous versions of Conan package for OpenSSL doesn't specify
         # some libraries that are required to be linked with it on Windows.
-        include_dirs, library_dirs, libraries = self._conan_install(
+        include_dirs, library_dirs, link_libraries = self._conan_install(
             "OpenSSL/latest_1.1.1x@conan/stable",
             "opus/[~=1.2.1]@bincrafters/stable",
             options={"OpenSSL:no_zlib": True}
@@ -272,9 +272,13 @@ class BuildExtCommandHook(build_ext):
     #   Phase 3: Build libtgvoip and return a complete SWIG Extension object.
         ninja_run("-C", build_dir)
         library_dirs.append(build_dir)
-        libraries.extend(gypd_libraries)
-        libraries.append(_LIBRARY_NAME if _PLATFORM_OS == _OS_WINDOWS
-                         else _LIBRARY_NAME_CUT)
+
+        # The correct link order is important for GCC. The object files and
+        # libraries to link with must be specified after linking ones.
+        libraries = [_LIBRARY_NAME if _PLATFORM_OS == _OS_WINDOWS
+                    else _LIBRARY_NAME_CUT]
+        gypd_libraries.extend(link_libraries)
+        libraries.extend(set(gypd_libraries))
 
         if _DEBUG_LEVEL == False:
             gypd_macros.append(("SWIG_PYTHON_INTERPRETER_NO_DEBUG", None))
@@ -286,7 +290,7 @@ class BuildExtCommandHook(build_ext):
             sources=dummy_ext.sources,
             include_dirs=include_dirs,
             library_dirs=library_dirs,
-            libraries=list(set(libraries)),
+            libraries=libraries,
             define_macros=gypd_macros,
             swig_opts=[
                 "-Wall",

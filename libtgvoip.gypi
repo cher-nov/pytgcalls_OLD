@@ -31,6 +31,7 @@
       [ '"<(OS)" == "linux"', {
         'cflags': [
           '-fPIC',
+          '-shared',
         ],
       }],
     ],
