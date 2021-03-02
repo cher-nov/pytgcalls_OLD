@@ -12,7 +12,7 @@ from distutils.command.build_py import build_py
 from distutils.command.build_ext import build_ext
 from distutils.ccompiler import gen_preprocess_options
 
-PACKAGE_NAME = "pytgcalls"
+PACKAGE_NAME = "pytgcalls_OLD"
 PACKAGE_VERSION = "0.1"
 ENVVAR_VERSION_SUFFIX = "PYPI_SETUP_VERSION_SUFFIX"
 
